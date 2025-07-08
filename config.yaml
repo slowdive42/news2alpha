@@ -1,0 +1,10 @@
+# --- Configuration for the News2Alpha Pipeline ---
+
+# 1. Data Ingestion Parameters
+news:
+  query: 'Bitcoin' # The keyword to search for in news articles
+  from_date: '2024-06-08'
+  to_date: '2024-07-08'
+
+market:
+  ticker: 'BTC-USD' # The crypto ticker to fetch from yfinance

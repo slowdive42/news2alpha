@@ -1,0 +1,13 @@
+pandas
+numpy
+newsapi-python
+yfinance
+nltk
+spacy
+matplotlib
+seaborn
+plotly
+python-dotenv
+pytest
+pytest-mock
+PyYAML
