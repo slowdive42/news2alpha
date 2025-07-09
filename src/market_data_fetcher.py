@@ -1,66 +1,89 @@
-from binance.client import Client
-import pandas as pd
 import os
-from datetime import datetime
-
-# Replace with your actual API key and secret from environment variables or a config file
-# For security, it's recommended to use environment variables.
-# BINANCE_API_KEY = os.environ.get('BINANCE_API_KEY')
-# BINANCE_API_SECRET = os.environ.get('BINANCE_API_SECRET')
-
-# For demonstration purposes, you can hardcode them, but NOT recommended for production.
-# client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
-# If you don't have an API key and secret, you can use the testnet or public endpoints.
-# For public data, you might not need API key/secret, but for historical klines, it's better to have them.
-client = Client("", "") # Using empty strings for public access, replace with your keys if needed
+import yaml
+import pandas as pd
+import ccxt
+from datetime import datetime, timezone
 
 def fetch_market_data(symbol: str, interval: str, start_str: str, end_str: str, output_path: str):
     """
-    Fetches historical market data from Binance for a given symbol and interval.
+    Fetches historical market data from Binance using CCXT and saves it in a format
+    compatible with the rest of the pipeline.
 
     Args:
-        symbol (str): The trading pair symbol (e.g., 'BTCUSDT', 'ETHUSDT').
-        interval (str): The K-line interval (e.g., Client.KLINE_INTERVAL_1MINUTE, Client.KLINE_INTERVAL_5MINUTE, Client.KLINE_INTERVAL_1HOUR).
-        start_str (str): The start date for the data (e.g., '1 Jan, 2024').
-        end_str (str): The end date for the data (e.g., '1 Feb, 2024').
-        output_path (str): The path to save the market data (CSV file).
+        symbol (str): The trading pair symbol in CCXT format (e.g., 'BTC/USDT').
+        interval (str): The K-line interval (e.g., '1m', '1d').
+        start_str (str): The start date (YYYY-MM-DD).
+        end_str (str): The end date (YYYY-MM-DD).
+        output_path (str): The path to save the market data CSV file.
     """
-    print(f"Fetching {symbol} {interval} data from Binance...")
-    klines = client.get_historical_klines(symbol, interval, start_str, end_str)
+    exchange_params = {}
+    proxies = {}
 
-    if not klines:
-        print(f"No data found for symbol {symbol} with interval {interval} in the specified date range.")
+    if 'HTTP_PROXY' in os.environ:
+        proxies['http'] = os.environ['HTTP_PROXY']
+    if 'HTTPS_PROXY' in os.environ:
+        proxies['https'] = os.environ['HTTPS_PROXY']
+
+    if proxies:
+        exchange_params['proxies'] = proxies
+        print(f"Using proxies: {proxies}")
+
+    exchange = ccxt.binance(exchange_params)
+    print(f"Fetching {symbol} data for interval {interval} from Binance using CCXT...")
+
+    # Convert dates to milliseconds
+    since = int(datetime.strptime(start_str, '%Y-%m-%d').replace(tzinfo=timezone.utc).timestamp() * 1000)
+    end_msec = int(datetime.strptime(end_str, '%Y-%m-%d').replace(tzinfo=timezone.utc).timestamp() * 1000)
+
+    all_klines = []
+    while since < end_msec:
+        try:
+            klines = exchange.fetch_ohlcv(symbol, timeframe=interval, since=since)
+            if not klines:
+                break # No more data
+            all_klines.extend(klines)
+            since = klines[-1][0] + exchange.parse_timeframe(interval) * 1000 # Move to the next timeframe
+        except Exception as e:
+            print(f"An error occurred while fetching data: {e}")
+            break
+
+    if not all_klines:
+        print("No data found for the specified parameters.")
         return
 
-    # Process the klines into a pandas DataFrame
-    data = pd.DataFrame(klines, columns=[
-        'open_time', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_asset_volume', 'number_of_trades',
-        'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
-    ])
+    # Process into a pandas DataFrame
+    data = pd.DataFrame(all_klines, columns=['timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
+    data['Date'] = pd.to_datetime(data['timestamp'], unit='ms').dt.tz_localize('UTC') # Localize to UTC
+    data.set_index('Date', inplace=True)
 
-    data['open_time'] = pd.to_datetime(data['open_time'], unit='ms')
-    data['close_time'] = pd.to_datetime(data['close_time'], unit='ms')
-    data = data.astype({
-        'open': float, 'high': float, 'low': float, 'close': float, 'volume': float,
-        'quote_asset_volume': float, 'number_of_trades': int,
-        'taker_buy_base_asset_volume': float, 'taker_buy_quote_asset_volume': float
-    })
+    # Select and reorder columns for pipeline compatibility
+    output_df = data[['Open', 'High', 'Low', 'Close', 'Volume']].copy()
 
-    # Set open_time as index
-    data.set_index('open_time', inplace=True)
+    # Save the data
+    output_df.to_csv(output_path)
+    print(f"Successfully saved market data to {output_path}")
 
-    data.to_csv(output_path)
-    print(f"Successfully downloaded market data for {symbol} and saved to {output_path}")
+def _load_config_for_main():
+    config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config.yaml')
+    if not os.path.exists(config_path):
+        config_path = 'config.yaml'
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
 if __name__ == '__main__':
-    # This is an example of how to run the fetcher directly
-    SYMBOL = 'BTCUSDT'
-    INTERVAL = Client.KLINE_INTERVAL_5MINUTE # Example: 5-minute interval
-    START_DATE_STR = '1 July, 2024'
-    END_DATE_STR = '8 July, 2024'
+    config = _load_config_for_main()
+    market_config = config['market']
+    news_config = config['news']
+
+    # CCXT uses '/' in symbols, e.g., BTC/USDT
+    SYMBOL = market_config['symbol'].replace('USDT', '/USDT') 
+    INTERVAL = market_config['interval']
+    FROM_DATE = news_config['from_date']
+    TO_DATE = news_config['to_date']
+
     OUTPUT_DIR = os.path.join('..', '..', 'data', 'market_data')
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"{SYMBOL}_{INTERVAL}_{START_DATE_STR.replace(' ', '_')}_{END_DATE_STR.replace(' ', '_')}.csv")
+    OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"{market_config['symbol']}_{INTERVAL}_{FROM_DATE}_{TO_DATE}.csv")
 
-    fetch_market_data(SYMBOL, INTERVAL, START_DATE_STR, END_DATE_STR, OUTPUT_PATH)
+    fetch_market_data(SYMBOL, INTERVAL, FROM_DATE, TO_DATE, OUTPUT_PATH)
+

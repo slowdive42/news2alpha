@@ -6,7 +6,7 @@ from src.aligner import align_features_with_market_data
 def nlp_features_file(tmp_path):
     """Create a dummy NLP features CSV file."""
     data = {
-        'publishedAt': ['2024-01-01T10:00:00Z', '2024-01-01T14:00:00Z', '2024-01-02T11:00:00Z'],
+        'publishedAt': ['2024-01-01T10:00:00', '2024-01-01T14:00:00', '2024-01-02T11:00:00'], # Removed 'Z'
         'sentiment_score': [0.5, -0.1, 0.9],
         'entities': ["[ ('BTC', 'ORG') ]", "[]", "[ ('ETH', 'ORG') ]"]
     }

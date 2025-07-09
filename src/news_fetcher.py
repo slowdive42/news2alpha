@@ -1,50 +1,104 @@
 import os
+import json
+import yaml
+import requests
 from dotenv import load_dotenv
 from newsapi import NewsApiClient
-import json
 
 # Load environment variables from .env file
 load_dotenv()
 
-def fetch_news(api_key: str, query: str, from_date: str, to_date: str, output_path: str):
-    """
-    Fetches news articles from NewsAPI for a given query and date range.
-
-    Args:
-        api_key (str): Your NewsAPI API key.
-        query (str): The search query (e.g., 'crypto', 'Bitcoin').
-        from_date (str): The start date for articles (YYYY-MM-DD).
-        to_date (str): The end date for articles (YYYY-MM-DD).
-        output_path (str): The path to save the fetched news data (JSON file).
-    """
+def _fetch_newsapi_news(api_key: str, query: str, from_date: str, to_date: str) -> list:
+    """Fetches news articles from NewsAPI."""
+    print("Fetching news from NewsAPI...")
     newsapi = NewsApiClient(api_key=api_key)
-
-    all_articles = newsapi.get_everything(
+    response = newsapi.get_everything(
         q=query,
         from_param=from_date,
         to=to_date,
         language='en',
         sort_by='publishedAt',
     )
+    return response.get('articles', [])
 
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(all_articles, f, ensure_ascii=False, indent=4)
+def _fetch_cryptopanic_news(api_key: str, query: str) -> list:
+    """
+    Fetches news articles from CryptoPanic API.
+    """
+    print("Fetching news from CryptoPanic...")
+    url = f"https://cryptopanic.com/api/v2/posts/?auth_token={api_key}&currencies={query}&public=true"
+    response = requests.get(url)
+    response.raise_for_status()
+    data = response.json()
 
-    print(f"Successfully fetched {len(all_articles['articles'])} articles and saved to {output_path}")
+    articles = []
+    for item in data.get('results', []):
+        articles.append({
+            'publishedAt': item.get('created_at'),
+            'title': item.get('title'),
+            'description': item.get('title'),
+            'url': item.get('url'),
+            'source': {'name': item.get('source', {}).get('title')}
+        })
+    return articles
+
+def fetch_news(api_key: str, query: str, from_date: str, to_date: str, output_path: str, source: str = 'newsapi'):
+    """
+    Fetches news articles from the specified source.
+    """
+    if source == 'cryptopanic':
+        articles = _fetch_cryptopanic_news(api_key, query)
+    elif source == 'newsapi':
+        articles = _fetch_newsapi_news(api_key, query, from_date, to_date)
+    else:
+        raise ValueError(f"Unknown news source: {source}")
+
+    if not articles:
+        print(f"Warning: Fetched 0 articles from {source}. No data will be written.")
+        return
+
+    output_data = {'articles': articles}
+    try:
+        absolute_output_path = os.path.abspath(output_path)
+        print(f"Attempting to write {len(articles)} articles to: {absolute_output_path}")
+        os.makedirs(os.path.dirname(absolute_output_path), exist_ok=True)
+        with open(absolute_output_path, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=4)
+        print(f"Successfully saved data to {absolute_output_path}")
+    except IOError as e:
+        print(f"\n--- FILE WRITE ERROR ---\n")
+        print(f"An I/O error occurred while trying to write to the file: {e}")
+        print(f"Please check if you have write permissions for the directory: {os.path.dirname(absolute_output_path)}")
+        print(f"------------------------\n")
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---\n")
+        print(f"An unexpected error occurred during file writing: {e}")
+        print(f"------------------------\n")
+
+def _load_config_for_main():
+    config_path = os.path.join(os.path.dirname(__file__), '..', '..', 'config.yaml')
+    if not os.path.exists(config_path):
+        config_path = 'config.yaml'
+    with open(config_path, 'r') as f:
+        return yaml.safe_load(f)
 
 if __name__ == '__main__':
-    # This is an example of how to run the fetcher directly
-    # You will need to have a .env file with NEWS_API_KEY="your_api_key"
-    api_key = os.getenv("NEWS_API_KEY")
+    config = _load_config_for_main()
+    news_config = config['news']
+    
+    SOURCE = news_config.get('source', 'newsapi')
+    QUERY = news_config['query']
+    FROM_DATE = str(news_config['from_date'])
+    TO_DATE = str(news_config['to_date'])
+
+    api_key = os.getenv("NEWS_API_KEY") if SOURCE == 'newsapi' else os.getenv("CRYPTOPANIC_API_KEY")
+
     if not api_key:
-        raise ValueError("NEWS_API_KEY not found in .env file. Please add it.")
+        print(f"API key for {SOURCE} not found in .env file. Skipping.")
+    else:
+        print(f"\n--- Running {SOURCE} Fetcher Example from Config ---")
+        OUTPUT_DIR = os.path.join('data', 'raw_news')
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"{SOURCE}_{QUERY}_{FROM_DATE}_{TO_DATE}.json")
+        fetch_news(api_key, QUERY, FROM_DATE, TO_DATE, OUTPUT_PATH, source=SOURCE)
 
-    # Define parameters for the news fetch
-    QUERY = 'cryptocurrency'
-    FROM_DATE = '2024-06-01'
-    TO_DATE = '2024-07-01'
-    OUTPUT_DIR = os.path.join('..', '..', 'data', 'raw_news')
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"{QUERY}_{FROM_DATE}_{TO_DATE}.json")
-
-    fetch_news(api_key, QUERY, FROM_DATE, TO_DATE, OUTPUT_PATH)

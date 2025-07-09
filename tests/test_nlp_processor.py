@@ -1,5 +1,6 @@
 import pytest
 import pandas as pd
+import pytest_mock # Added for mocker fixture
 from src.nlp_processor import process_nlp_features, download_nlp_models
 
 @pytest.fixture
