@@ -81,7 +81,11 @@ if __name__ == '__main__':
     FROM_DATE = news_config['from_date']
     TO_DATE = news_config['to_date']
 
-    OUTPUT_DIR = os.path.join('..', '..', 'data', 'market_data')
+    script_dir = os.path.dirname(__file__)
+    data_dir = os.path.join(script_dir, '..', 'data')
+    market_data_dir = os.path.join(data_dir, 'market_data')
+
+    OUTPUT_DIR = market_data_dir
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"{market_config['symbol']}_{INTERVAL}_{FROM_DATE}_{TO_DATE}.csv")
 

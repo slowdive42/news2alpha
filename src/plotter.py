@@ -54,12 +54,16 @@ if __name__ == '__main__':
     TO_DATE = str(news_config['to_date'])
     SYMBOL = market_config['symbol']
 
+    script_dir = os.path.dirname(__file__)
+    data_dir = os.path.join(script_dir, '..', 'data')
+    final_features_dir = os.path.join(data_dir, 'final_features')
+
     INPUT_PATH = os.path.join(
-        '..', '..', 'data', 'final_features',
+        final_features_dir,
         f"final_{SYMBOL}_{FROM_DATE}_{TO_DATE}.csv"
     )
 
-    OUTPUT_DIR = os.path.join('..', '..', 'data', 'final_features')
+    OUTPUT_DIR = final_features_dir
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     OUTPUT_HTML_PATH = os.path.join(OUTPUT_DIR, f"plot_{SYMBOL}_{FROM_DATE}_{TO_DATE}.html")
 

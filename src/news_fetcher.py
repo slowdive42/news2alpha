@@ -97,7 +97,11 @@ if __name__ == '__main__':
         print(f"API key for {SOURCE} not found in .env file. Skipping.")
     else:
         print(f"\n--- Running {SOURCE} Fetcher Example from Config ---")
-        OUTPUT_DIR = os.path.join('data', 'raw_news')
+        script_dir = os.path.dirname(__file__)
+        data_dir = os.path.join(script_dir, '..', 'data')
+        raw_news_dir = os.path.join(data_dir, 'raw_news')
+
+        OUTPUT_DIR = raw_news_dir
         os.makedirs(OUTPUT_DIR, exist_ok=True)
         OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"{SOURCE}_{QUERY}_{FROM_DATE}_{TO_DATE}.json")
         fetch_news(api_key, QUERY, FROM_DATE, TO_DATE, OUTPUT_PATH, source=SOURCE)

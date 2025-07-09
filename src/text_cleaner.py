@@ -62,8 +62,13 @@ if __name__ == '__main__':
     FROM_DATE = str(news_config['from_date'])
     TO_DATE = str(news_config['to_date'])
 
-    INPUT_PATH = os.path.join('..', '..', 'data', 'raw_news', f"{SOURCE}_{QUERY}_{FROM_DATE}_{TO_DATE}.json")
-    OUTPUT_DIR = os.path.join('..', '..', 'data', 'processed_news')
+    script_dir = os.path.dirname(__file__)
+    data_dir = os.path.join(script_dir, '..', 'data')
+    raw_news_dir = os.path.join(data_dir, 'raw_news')
+    processed_news_dir = os.path.join(data_dir, 'processed_news')
+
+    INPUT_PATH = os.path.join(raw_news_dir, f"{SOURCE}_{QUERY}_{FROM_DATE}_{TO_DATE}.json")
+    OUTPUT_DIR = processed_news_dir
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     OUTPUT_PATH = os.path.join(OUTPUT_DIR, f"cleaned_{QUERY}_{FROM_DATE}_{TO_DATE}.csv")
 
